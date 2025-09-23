@@ -1,5 +1,6 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
+import pandas as pd
 
 # Funções para cada tela
 def tela_metodos_basicos():
@@ -12,8 +13,8 @@ def tela_metodos_basicos():
     else:
         tamanho_problema = None
 
-    if st.button("Solução Inicial"):
-        st.info("Função de solução inicial ainda não implementada.")
+    # Botão sempre visível
+    mostrar_solucao = st.button("Solução Inicial")
 
     metodo = st.selectbox(
         "Método",
@@ -25,6 +26,50 @@ def tela_metodos_basicos():
             st.warning("Por favor, defina o tamanho do problema.")
         else:
             st.info("Módulo em desenvolvimento.")
+
+    # Exibe matriz se tipo for fixo
+    if tipo_execucao == "Fixo":
+        dados = [
+            [("M1", 3), ("M2", 2), ("M3", 2)],
+            [("M2", 2), ("M3", 1), ("M1", 4)],
+            [("M3", 4), ("M1", 3), ("M2", 2)]
+        ]
+
+        dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
+        df = pd.DataFrame(dados_formatados, columns=["Op1", "Op2", "Op3"], index=["J1", "J2", "J3"])
+
+        st.subheader("Matriz de Operações")
+        st.dataframe(df)
+
+        # Gera solução inicial apenas se botão for clicado
+        if mostrar_solucao:
+            disponibilidade_maquinas = {"M1": 0, "M2": 0, "M3": 0}
+            cronograma = []
+
+            for job_id, operacoes in enumerate(dados, start=1):
+                tempo_atual = 0
+                for op_index, (maquina, duracao) in enumerate(operacoes, start=1):
+                    inicio = max(tempo_atual, disponibilidade_maquinas[maquina])
+                    fim = inicio + duracao
+                    disponibilidade_maquinas[maquina] = fim
+                    tempo_atual = fim
+
+                    cronograma.append({
+                        "Job": f"J{job_id}",
+                        "Operação": f"Op{op_index}",
+                        "Máquina": maquina,
+                        "Início": inicio,
+                        "Fim": fim
+                    })
+
+            df_cronograma = pd.DataFrame(cronograma)
+            st.subheader("Solução Inicial")
+            st.dataframe(df_cronograma)
+
+    elif tipo_execucao == "Aleatório":
+        if mostrar_solucao:
+            st.info("Função de solução inicial ainda não implementada para execução aleatória.")
+
 
 def tela_sobre():
     st.header("Sobre o Projeto")
@@ -48,21 +93,21 @@ def tela_algoritmos_geneticos():
 
 # Menu lateral com streamlit_option_menu
 with st.sidebar:
-     escolha = option_menu(
-         menu_title="Menu",
-         options=["Início", "Métodos Básicos", "Sobre", "Algoritmos Genéticos"],
-         icons=["house", "calculator", "info-circle", "shuffle"],
-         menu_icon="list",
-         default_index=0,
-         orientation="vertical",
-         styles={
+    escolha = option_menu(
+        menu_title="Menu",
+        options=["Início", "Métodos Básicos", "Sobre", "Algoritmos Genéticos"],
+        icons=["house", "calculator", "info-circle", "shuffle"],
+        menu_icon="list",
+        default_index=0,
+        orientation="vertical",
+        styles={
             "nav-link-selected": {
                 "background-color": "#464646",
                 "color": "white",
                 "font-weight": "bold"
             }
         }
-     )
+    )
 
 # Navegação entre telas
 if escolha == "Métodos Básicos":
@@ -72,5 +117,5 @@ elif escolha == "Sobre":
 elif escolha == "Algoritmos Genéticos":
     tela_algoritmos_geneticos()
 else:
-    st.title("Bem-vindo ao sistema de otimização")
+    st.title("Job Shop Scheduling")
     st.write("Use o menu lateral para navegar entre as opções.")
