@@ -1,6 +1,7 @@
 import streamlit as st
 from streamlit_option_menu import option_menu
 import pandas as pd
+import random
 
 # Funções para cada tela
 def tela_metodos_basicos():
@@ -71,7 +72,24 @@ def tela_metodos_basicos():
 
     elif tipo_execucao == "Aleatório":
         if mostrar_solucao:
-            st.info("Função de solução inicial ainda não implementada para execução aleatória.")
+            # Gerar problema aleatório
+            dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=3)
+            dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
+            df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(3)], index=[f"J{i+1}" for i in range(tamanho_problema)])
+            st.subheader("Problema Aleatório Gerado")
+            st.dataframe(df)
+
+            # Gerar solução inicial
+            dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=3)
+            cronograma = gerar_solucao_inicial(dados)
+            df_cronograma = pd.DataFrame(cronograma)
+
+            st.subheader("Solução Inicial Aleatória")
+            st.dataframe(df_cronograma)
+
+            makespan = avalia(cronograma)
+            st.metric("Makespan", f"{makespan} unidades de tempo")
+
 
 
 def tela_sobre():
@@ -93,6 +111,65 @@ def tela_sobre():
 def tela_algoritmos_geneticos():
     st.header("Algoritmos Genéticos")
     st.info("Módulo em desenvolvimento.")
+
+def gerar_problema_aleatorio(num_jobs, num_maquinas):
+    """
+    Gera um problema aleatório de Job Shop Scheduling.
+    
+    Parâmetros:
+    - num_jobs: número de jobs
+    - num_maquinas: número de máquinas (e operações por job)
+    
+    Retorno:
+    - dados: lista de listas com tuplas (máquina, duração)
+    """
+    maquinas = [f"M{i+1}" for i in range(num_maquinas)]
+    dados = []
+
+    for _ in range(num_jobs):
+        # Embaralha a ordem das máquinas para cada job
+        ordem_maquinas = random.sample(maquinas, len(maquinas))
+        operacoes = [(maquina, random.randint(1, 10)) for maquina in ordem_maquinas]
+        dados.append(operacoes)
+
+    return dados
+
+def gerar_solucao_inicial(dados):
+    """
+    Gera a solução inicial para um problema de Job Shop Scheduling.
+    
+    Parâmetro:
+    - dados: lista de listas com tuplas (máquina, duração) para cada job.
+    
+    Retorno:
+    - cronograma: lista de dicionários com início e fim de cada operação.
+    """
+    disponibilidade_maquinas = {}
+    cronograma = []
+
+    # Inicializa disponibilidade das máquinas
+    for job in dados:
+        for maquina, _ in job:
+            disponibilidade_maquinas[maquina] = 0
+
+    # Processa cada job
+    for job_id, operacoes in enumerate(dados, start=1):
+        tempo_atual = 0
+        for op_index, (maquina, duracao) in enumerate(operacoes, start=1):
+            inicio = max(tempo_atual, disponibilidade_maquinas[maquina])
+            fim = inicio + duracao
+            disponibilidade_maquinas[maquina] = fim
+            tempo_atual = fim
+
+            cronograma.append({
+                "Job": f"J{job_id}",
+                "Operação": f"Op{op_index}",
+                "Máquina": maquina,
+                "Início": inicio,
+                "Fim": fim
+            })
+
+    return cronograma
 
 def avalia(cronograma):
     """
