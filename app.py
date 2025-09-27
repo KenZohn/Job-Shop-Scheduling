@@ -66,6 +66,9 @@ def tela_metodos_basicos():
             st.subheader("Solução Inicial")
             st.dataframe(df_cronograma)
 
+            makespan = avalia(cronograma)
+            st.metric("Makespan", f"{makespan} unidades de tempo")
+
     elif tipo_execucao == "Aleatório":
         if mostrar_solucao:
             st.info("Função de solução inicial ainda não implementada para execução aleatória.")
@@ -90,6 +93,27 @@ def tela_sobre():
 def tela_algoritmos_geneticos():
     st.header("Algoritmos Genéticos")
     st.info("Módulo em desenvolvimento.")
+
+def avalia(cronograma):
+    """
+    Avalia o cronograma de um Job Shop Scheduling.
+    Retorna o makespan (tempo total de conclusão).
+    
+    Parâmetro:
+    - cronograma: lista de dicionários com chaves 'Início' e 'Fim' para cada operação.
+    
+    Retorno:
+    - makespan: int
+    """
+    if not cronograma:
+        return 0
+
+    # Extrai o tempo de término de todas as operações
+    tempos_finais = [op["Fim"] for op in cronograma]
+
+    # O makespan é o maior tempo de término
+    makespan = max(tempos_finais)
+    return makespan
 
 # Menu lateral com streamlit_option_menu
 with st.sidebar:
