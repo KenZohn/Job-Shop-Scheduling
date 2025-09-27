@@ -1,7 +1,8 @@
 import streamlit as st
-from streamlit_option_menu import option_menu
 import pandas as pd
 import random
+
+from streamlit_option_menu import option_menu
 
 # Funções para cada tela
 def tela_metodos_basicos():
@@ -28,8 +29,8 @@ def tela_metodos_basicos():
         else:
             st.info("Módulo em desenvolvimento.")
 
-    # Exibe matriz se tipo for fixo
     if tipo_execucao == "Fixo":
+        # Problema fixo
         dados = [
             [("M1", 3), ("M2", 2), ("M3", 2)],
             [("M2", 2), ("M3", 1), ("M1", 4)],
@@ -39,10 +40,10 @@ def tela_metodos_basicos():
         dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
         df = pd.DataFrame(dados_formatados, columns=["Op1", "Op2", "Op3"], index=["J1", "J2", "J3"])
 
-        st.subheader("Matriz de Operações")
+        st.subheader("Problema")
         st.dataframe(df)
 
-        # Gera solução inicial apenas se botão for clicado
+        # Gera solução inicial fixa
         if mostrar_solucao:
             disponibilidade_maquinas = {"M1": 0, "M2": 0, "M3": 0}
             cronograma = []
@@ -68,6 +69,7 @@ def tela_metodos_basicos():
             st.dataframe(df_cronograma)
 
             makespan = avalia(cronograma)
+            st.subheader("Avalia")
             st.metric("Makespan", f"{makespan} unidades de tempo")
 
     elif tipo_execucao == "Aleatório":
@@ -76,7 +78,7 @@ def tela_metodos_basicos():
             dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=3)
             dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
             df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(3)], index=[f"J{i+1}" for i in range(tamanho_problema)])
-            st.subheader("Problema Aleatório Gerado")
+            st.subheader("Problema")
             st.dataframe(df)
 
             # Gerar solução inicial
@@ -84,13 +86,13 @@ def tela_metodos_basicos():
             cronograma = gerar_solucao_inicial(dados)
             df_cronograma = pd.DataFrame(cronograma)
 
-            st.subheader("Solução Inicial Aleatória")
+            st.subheader("Solução Inicial")
             st.dataframe(df_cronograma)
 
+            # Avaliar solução
             makespan = avalia(cronograma)
+            st.subheader("Avalia")
             st.metric("Makespan", f"{makespan} unidades de tempo")
-
-
 
 def tela_sobre():
     st.header("Sobre o Projeto")
@@ -112,17 +114,8 @@ def tela_algoritmos_geneticos():
     st.header("Algoritmos Genéticos")
     st.info("Módulo em desenvolvimento.")
 
+# Gera um problema aleatório
 def gerar_problema_aleatorio(num_jobs, num_maquinas):
-    """
-    Gera um problema aleatório de Job Shop Scheduling.
-    
-    Parâmetros:
-    - num_jobs: número de jobs
-    - num_maquinas: número de máquinas (e operações por job)
-    
-    Retorno:
-    - dados: lista de listas com tuplas (máquina, duração)
-    """
     maquinas = [f"M{i+1}" for i in range(num_maquinas)]
     dados = []
 
@@ -134,16 +127,8 @@ def gerar_problema_aleatorio(num_jobs, num_maquinas):
 
     return dados
 
+# Gera uma solução inicial
 def gerar_solucao_inicial(dados):
-    """
-    Gera a solução inicial para um problema de Job Shop Scheduling.
-    
-    Parâmetro:
-    - dados: lista de listas com tuplas (máquina, duração) para cada job.
-    
-    Retorno:
-    - cronograma: lista de dicionários com início e fim de cada operação.
-    """
     disponibilidade_maquinas = {}
     cronograma = []
 
@@ -171,24 +156,15 @@ def gerar_solucao_inicial(dados):
 
     return cronograma
 
+# Retorna o makespan (tempo total de conclusão)
 def avalia(cronograma):
-    """
-    Avalia o cronograma de um Job Shop Scheduling.
-    Retorna o makespan (tempo total de conclusão).
-    
-    Parâmetro:
-    - cronograma: lista de dicionários com chaves 'Início' e 'Fim' para cada operação.
-    
-    Retorno:
-    - makespan: int
-    """
     if not cronograma:
         return 0
 
-    # Extrai o tempo de término de todas as operações
+    # Obtém o tempo de término das operações
     tempos_finais = [op["Fim"] for op in cronograma]
 
-    # O makespan é o maior tempo de término
+    # Obtém o maior tempo de término
     makespan = max(tempos_finais)
     return makespan
 
