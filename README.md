@@ -11,7 +11,7 @@ O desenvolvimento foi realizado nas versões 3.13.4 e 3.13.7 do Python.
 
 ## Instalação das Dependências
 ### Crie um ambiente virtual
-No terminal, execute o comando abaixo para criar um ambiente virtual e não gerar conflitos com bibliotecas de outros projetos.
+No terminal, vá até o diretório do projeto e execute o comando abaixo para criar um ambiente virtual para não gerar conflitos com bibliotecas de outros projetos.
 ```
 python -m venv venv
 ```
