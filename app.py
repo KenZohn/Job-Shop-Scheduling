@@ -68,6 +68,7 @@ def tela_metodos_basicos():
             st.subheader("Solução Inicial")
             st.dataframe(df_cronograma)
 
+            # Avaliar solução
             makespan = avalia(cronograma)
             st.subheader("Avalia")
             st.metric("Makespan", f"{makespan} unidades de tempo")
@@ -97,13 +98,12 @@ def tela_metodos_basicos():
 def tela_sobre():
     st.header("Sobre o Projeto")
     st.markdown("""
-    ### Descrição do Problema
-    Este projeto tem como objetivo aplicar algoritmos de Job Shop Scheduling.
-                
+    ### Descrição
     O Job Shop Scheduling (ou escalonamento de oficina) é uma técnica usada para organizar e otimizar a produção em ambientes industriais onde diferentes tarefas (jobs) precisam passar por várias máquinas, cada uma com uma sequência específica.
-    
-    - Minimiza o tempo total de produção (makespan): Busca reduzir o tempo necessário para completar todos os trabalhos.
-    - Evita conflitos de recursos: Garante que duas tarefas não sejam atribuídas à mesma máquina ao mesmo tempo.
+
+    **Objetivos:**
+    - Reduzir o tempo necessário para completar todos os trabalhos.
+    - Garantir que duas tarefas não sejam atribuídas à mesma máquina ao mesmo tempo.
 
     ### Discentes
     - Johnny Keniti Mukai
