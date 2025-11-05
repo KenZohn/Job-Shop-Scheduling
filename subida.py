@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import random
 import copy
+import math
 
 from streamlit_option_menu import option_menu
 
@@ -49,7 +50,23 @@ def tela_metodos_basicos():
                 st.dataframe(pd.DataFrame(cronograma_otimizado))
                 st.metric("Makespan Otimizado", f"{melhor_makespan} unidades de tempo")
 
+            elif metodo == "Subida de encosta com tentativas":
+                cronograma_otimizado, melhor_makespan = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=3)
+                st.subheader("Solução Otimizada (Subida de Encosta com Tentativas)")
+                st.dataframe(pd.DataFrame(cronograma_otimizado))
+                st.metric("Makespan Otimizado", f"{melhor_makespan} unidades de tempo")
 
+            elif metodo == "Têmpera simulada":
+                cronograma_otimizado, melhor_makespan = tempera_simulada(
+                    dados,
+                    solucao_inicial,
+                    temp_inicial=500,
+                    temp_final=0.1,
+                    fator=0.8
+                )
+                st.subheader("Solução Otimizada (Têmpera Simulada)")
+                st.dataframe(pd.DataFrame(cronograma_otimizado))
+                st.metric("Makespan Otimizado", f"{melhor_makespan} unidades de tempo")
 
     if tipo_execucao == "Fixo":
         # Problema fixo
@@ -302,7 +319,45 @@ def subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=3):
 
     return melhor_cronograma, melhor_makespan
 
+def tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.8):
+    # Constrói lista de operações por máquina a partir dos dados
+    maquina_ops = construir_lista_por_maquina(dados)
 
+    # Solução corrente
+    melhor_cronograma = solucao_inicial
+    melhor_makespan = avalia(melhor_cronograma)
+
+    atual_cronograma = melhor_cronograma
+    atual_makespan = melhor_makespan
+
+    temperatura = temp_inicial
+
+    while temperatura > temp_final:
+        # Gera vizinho
+        vizinho_ops = gerar_vizinho(maquina_ops)
+        cronograma_vizinho = construir_cronograma(dados, vizinho_ops)
+        makespan_vizinho = avalia(cronograma_vizinho)
+
+        delta = makespan_vizinho - atual_makespan
+
+        if delta < 0:
+            # Aceita melhora
+            atual_cronograma = cronograma_vizinho
+            atual_makespan = makespan_vizinho
+            if makespan_vizinho < melhor_makespan:
+                melhor_cronograma = cronograma_vizinho
+                melhor_makespan = makespan_vizinho
+        else:
+            # Aceita piora com probabilidade
+            prob = math.exp(-delta / temperatura)
+            if random.random() < prob:
+                atual_cronograma = cronograma_vizinho
+                atual_makespan = makespan_vizinho
+
+        # Reduz temperatura
+        temperatura *= fator
+
+    return melhor_cronograma, melhor_makespan
 
 
 
