@@ -6,6 +6,10 @@ import streamlit as st
 
 from streamlit_option_menu import option_menu
 
+def resetar_variavel():
+    if "solucao_inicial" in st.session_state:
+        del st.session_state["solucao_inicial"]
+
 # Funções para cada tela
 def tela_metodos_basicos():
     st.header("Métodos Básicos")
@@ -13,7 +17,9 @@ def tela_metodos_basicos():
     col1, col2 = st.columns(2)
 
     with col1:
-        tipo_execucao = st.selectbox("Tipo de execução", ["Fixo", "Aleatório"])
+        tipo_execucao = st.selectbox("Tipo de execução",
+                                     ["Fixo", "Aleatório"],
+                                     on_change=resetar_variavel)
 
         if tipo_execucao == "Aleatório":
             tamanho_problema = st.number_input("Tamanho do problema", min_value=1, step=1)
@@ -43,13 +49,14 @@ def tela_metodos_basicos():
             dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=3)
 
             if mostrar_solucao:
-                mostrar_solucao_inicial_aleatoria(dados, tamanho_problema)
+                cronograma, df = gerar_solucao_inicial_aleatoria(dados, tamanho_problema)
+                mostrar_solucao_inicial_aleatoria(dados, cronograma, df)
                 st.session_state.dados_problema = dados
-                st.session_state.tamanho_problema = tamanho_problema
-
-            elif "solucao_inicial" in st.session_state:
-                mostrar_solucao_inicial_aleatoria(st.session_state.dados_problema, st.session_state.tamanho_problema)
+                st.session_state.solucao_inicial = cronograma
+                st.session_state.df = df
             
+            elif "solucao_inicial" in st.session_state:
+                mostrar_solucao_inicial_aleatoria(st.session_state.dados_problema, st.session_state.solucao_inicial, st.session_state.df)
 
     with col2:
         metodo = st.selectbox(
@@ -64,7 +71,6 @@ def tela_metodos_basicos():
                 dados = st.session_state.dados_problema
                 solucao_inicial = st.session_state.solucao_inicial
                 makespan_inicial = st.session_state.makespan_inicial
-                df = st.session_state.df
 
                 # Rodar o método escolhido
                 if metodo == "Subida de encosta":
@@ -91,26 +97,7 @@ def tela_metodos_basicos():
                     st.dataframe(pd.DataFrame(cronograma_otimizado))
                     st.metric("Makespan Otimizado", f"{melhor_makespan} unidades de tempo")
 
-def tela_sobre():
-    st.header("Sobre o Projeto")
-    st.markdown("""
-    ### Descrição
-    O Job Shop Scheduling (ou escalonamento de oficina) é uma técnica usada para organizar e otimizar a produção em ambientes industriais onde diferentes tarefas (jobs) precisam passar por várias máquinas, cada uma com uma sequência específica.
 
-    **Objetivos:**
-    - Reduzir o tempo necessário para completar todos os trabalhos.
-    - Garantir que duas tarefas não sejam atribuídas à mesma máquina ao mesmo tempo.
-
-    ### Discentes
-    - Johnny Keniti Mukai
-    - Thais Ferreira Capucho
-    """)
-
-def tela_algoritmos_geneticos():
-    st.header("Algoritmos Genéticos")
-    st.info("Módulo em desenvolvimento.")
-
-# Gera um problema aleatório
 def gerar_problema_aleatorio(num_jobs, num_maquinas):
     maquinas = [f"M{i+1}" for i in range(num_maquinas)]
     dados = []
@@ -123,8 +110,7 @@ def gerar_problema_aleatorio(num_jobs, num_maquinas):
 
     return dados
 
-# Gera uma solução inicial
-def gerar_solucao_inicial(dados):
+def gerar_solucao_inicial_aleatoria(dados, tamanho_problema):
     disponibilidade_maquinas = {}
     cronograma = []
 
@@ -133,37 +119,7 @@ def gerar_solucao_inicial(dados):
         for maquina, _ in job:
             disponibilidade_maquinas[maquina] = 0
 
-    # Processa cada job
-    for job_id, operacoes in enumerate(dados, start=1):
-        tempo_atual = 0
-        for op_index, (maquina, duracao) in enumerate(operacoes, start=1):
-            inicio = max(tempo_atual, disponibilidade_maquinas[maquina])
-            fim = inicio + duracao
-            disponibilidade_maquinas[maquina] = fim
-            tempo_atual = fim
-
-            cronograma.append({
-                "Job": f"J{job_id}",
-                "Operação": f"Op{op_index}",
-                "Máquina": maquina,
-                "Início": inicio,
-                "Fim": fim
-            })
-
-    return cronograma
-
-import random
-
-def gerar_solucao_inicial_aleatoria(dados):
-    disponibilidade_maquinas = {}
-    cronograma = []
-
-    # Inicializa disponibilidade das máquinas
-    for job in dados:
-        for maquina, _ in job:
-            disponibilidade_maquinas[maquina] = 0
-
-    # Cria lista de todas operações (job_id, op_index, maquina, duracao)
+    # Cria lista de todas operações
     todas_operacoes = []
     for job_id, operacoes in enumerate(dados, start=1):
         for op_index, (maquina, duracao) in enumerate(operacoes, start=1):
@@ -189,8 +145,11 @@ def gerar_solucao_inicial_aleatoria(dados):
             "Início": inicio,
             "Fim": fim
         })
+    
+    dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
+    df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(3)], index=[f"J{i+1}" for i in range(tamanho_problema)])
 
-    return cronograma
+    return cronograma, df
 
 # Retorna o makespan (tempo total de conclusão)
 def avalia(cronograma):
@@ -244,15 +203,11 @@ def mostrar_solucao_fixa(dados):
     st.session_state.makespan_inicial = makespan
     st.session_state.df = df
 
-def mostrar_solucao_inicial_aleatoria(dados, tamanho_problema):
+def mostrar_solucao_inicial_aleatoria(dados, cronograma, df):
     # Gerar problema aleatório
-    dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
-    df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(3)], index=[f"J{i+1}" for i in range(tamanho_problema)])
     st.subheader("Problema")
     st.dataframe(df)
 
-    # Gerar solução inicial
-    cronograma = gerar_solucao_inicial_aleatoria(dados)
     df_cronograma = pd.DataFrame(cronograma)
 
     st.subheader("Solução Inicial")
@@ -264,7 +219,6 @@ def mostrar_solucao_inicial_aleatoria(dados, tamanho_problema):
     st.metric("Makespan", f"{makespan} unidades de tempo")
 
     st.session_state.dados_problema = dados
-    st.session_state.solucao_inicial = cronograma
     st.session_state.makespan_inicial = makespan
     st.session_state.df = df
 
@@ -319,12 +273,9 @@ def construir_cronograma(dados, maquina_ops):
             })
     return cronograma
 
-# Subida de encosta
 def subida_de_encosta(dados, solucao_inicial):
-    # Constrói lista de operações por máquina a partir dos dados
     maquina_ops = construir_lista_por_maquina(dados)
 
-    # Usa a solução inicial como ponto de partida
     melhor_cronograma = solucao_inicial
     melhor_makespan = avalia(melhor_cronograma)
 
@@ -334,23 +285,20 @@ def subida_de_encosta(dados, solucao_inicial):
         makespan_vizinho = avalia(cronograma_vizinho)
 
         if makespan_vizinho < melhor_makespan:
-            # Aceita o vizinho e continua
             maquina_ops = vizinho_ops
             melhor_cronograma = cronograma_vizinho
             melhor_makespan = makespan_vizinho
         else:
-            # Nenhuma melhora encontrada → para
             break
 
     return melhor_cronograma, melhor_makespan
 
 def subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=3):
-    # ponto de partida
     maquina_ops = construir_lista_por_maquina(dados)
     melhor_cronograma = solucao_inicial
     melhor_makespan = avalia(melhor_cronograma)
 
-    t = 0  # contador de falhas consecutivas
+    t = 0
 
     while t < tmax:
         vizinho_ops = gerar_vizinho(maquina_ops)
@@ -358,32 +306,26 @@ def subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=3):
         makespan_vizinho = avalia(cronograma_vizinho)
 
         if makespan_vizinho < melhor_makespan:
-            # melhora encontrada → aceita e zera contador
             maquina_ops = vizinho_ops
             melhor_cronograma = cronograma_vizinho
             melhor_makespan = makespan_vizinho
             t = 0
         else:
-            # não melhorou → soma falha
             t += 1
 
     return melhor_cronograma, melhor_makespan
 
 def tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.8):
-    # Constrói lista de operações por máquina a partir dos dados
     maquina_ops = construir_lista_por_maquina(dados)
 
-    # Solução corrente
     melhor_cronograma = solucao_inicial
     melhor_makespan = avalia(melhor_cronograma)
 
-    atual_cronograma = melhor_cronograma
     atual_makespan = melhor_makespan
 
     temperatura = temp_inicial
 
     while temperatura > temp_final:
-        # Gera vizinho
         vizinho_ops = gerar_vizinho(maquina_ops)
         cronograma_vizinho = construir_cronograma(dados, vizinho_ops)
         makespan_vizinho = avalia(cronograma_vizinho)
@@ -391,26 +333,37 @@ def tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, f
         delta = makespan_vizinho - atual_makespan
 
         if delta < 0:
-            # Aceita melhora
-            atual_cronograma = cronograma_vizinho
             atual_makespan = makespan_vizinho
             if makespan_vizinho < melhor_makespan:
                 melhor_cronograma = cronograma_vizinho
                 melhor_makespan = makespan_vizinho
         else:
-            # Aceita piora com probabilidade
             prob = math.exp(-delta / temperatura)
             if random.random() < prob:
-                atual_cronograma = cronograma_vizinho
                 atual_makespan = makespan_vizinho
 
-        # Reduz temperatura
         temperatura *= fator
 
     return melhor_cronograma, melhor_makespan
 
+def tela_sobre():
+    st.header("Sobre o Projeto")
+    st.markdown("""
+    ### Descrição
+    O Job Shop Scheduling (ou escalonamento de oficina) é uma técnica usada para organizar e otimizar a produção em ambientes industriais onde diferentes tarefas (jobs) precisam passar por várias máquinas, cada uma com uma sequência específica.
 
+    **Objetivos:**
+    - Reduzir o tempo necessário para completar todos os trabalhos.
+    - Garantir que duas tarefas não sejam atribuídas à mesma máquina ao mesmo tempo.
 
+    ### Discentes
+    - Johnny Keniti Mukai
+    - Thais Ferreira Capucho
+    """)
+
+def tela_algoritmos_geneticos():
+    st.header("Algoritmos Genéticos")
+    st.info("Módulo em desenvolvimento.")
 
 # Menu lateral com streamlit_option_menu
 with st.sidebar:
@@ -430,6 +383,9 @@ with st.sidebar:
         }
     )
 
+if "menu_anterior" not in st.session_state:
+    st.session_state.menu_anterior = None
+
 # Navegação entre telas
 if escolha == "Métodos Básicos":
     tela_metodos_basicos()
@@ -440,3 +396,10 @@ elif escolha == "Algoritmos Genéticos":
 else:
     st.title("Job Shop Scheduling")
     st.write("Use o menu lateral para navegar entre as opções.")
+
+# Reiniciar variáveis em sessão ao alterar o menu
+if escolha != st.session_state.menu_anterior:
+    if "solucao_inicial" in st.session_state:
+        del st.session_state["solucao_inicial"]
+
+    st.session_state.menu_anterior = escolha
