@@ -96,7 +96,9 @@ def tela_metodos_basicos():
                     st.subheader("Solução (Têmpera Simulada)")
                     st.dataframe(pd.DataFrame(cronograma_otimizado))
                     st.metric("Makespan Otimizado", f"{melhor_makespan} unidades de tempo")
-
+                
+                ganho = (100 * abs(melhor_makespan - makespan_inicial) / makespan_inicial)
+                st.metric("Ganho", f"{ganho:.2f} %")
 
 def gerar_problema_aleatorio(num_jobs, num_maquinas):
     maquinas = [f"M{i+1}" for i in range(num_maquinas)]
@@ -195,7 +197,6 @@ def mostrar_solucao_fixa(dados):
 
     # Avaliar solução
     makespan = avalia(cronograma)
-    st.subheader("Avalia")
     st.metric("Makespan", f"{makespan} unidades de tempo")
 
     st.session_state.dados_problema = dados
@@ -215,7 +216,6 @@ def mostrar_solucao_inicial_aleatoria(dados, cronograma, df):
 
     # Avaliar solução
     makespan = avalia(cronograma)
-    st.subheader("Avalia")
     st.metric("Makespan", f"{makespan} unidades de tempo")
 
     st.session_state.dados_problema = dados
