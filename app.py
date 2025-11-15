@@ -296,7 +296,7 @@ def tela_metodos_basicos():
             if ("dados_problema" not in st.session_state or 
                 "solucao_inicial" not in st.session_state or
                 "makespan_inicial" not in st.session_state):
-                st.warning("❌ Por favor, clique em 'Solução Inicial' primeiro para gerar uma solução inicial.")
+                st.warning(" Por favor, clique em 'Solução Inicial' primeiro para gerar uma solução inicial.")
                 return
             
             dados = st.session_state.dados_problema
@@ -327,7 +327,7 @@ def tela_metodos_basicos():
             st.metric("Ganho", f"{ganho:.2f} %")
 
         # BOTÃO CORRIGIDO - Agora salva no session_state que queremos ir para o relatório
-        if st.button("🔍 COMPARAR TODOS OS MÉTODOS"):
+        if st.button("COMPARAR TODOS OS MÉTODOS"):
             if "dados_problema" in st.session_state and "solucao_inicial" in st.session_state:
                 st.session_state.ir_para_relatorio = True
                 st.rerun()
@@ -335,25 +335,25 @@ def tela_metodos_basicos():
                 st.warning("Por favor, clique em 'Solução Inicial' primeiro!")
 
 def gerar_relatorio_comparativo():
-    st.header("🏆 RELATÓRIO COMPARATIVO - TODOS OS MÉTODOS")
+    st.header(" RELATÓRIO COMPARATIVO - TODOS OS MÉTODOS")
     
     # Verificar se existe solução inicial
     if "dados_problema" not in st.session_state or "solucao_inicial" not in st.session_state:
-        st.warning("❌ Por favor, vá para 'Métodos Básicos' e gere uma solução inicial primeiro!")
+        st.warning("Por favor, vá para 'Métodos Básicos' e gere uma solução inicial primeiro!")
         return
     
     dados = st.session_state.dados_problema
     solucao_inicial = st.session_state.solucao_inicial
     makespan_inicial = st.session_state.makespan_inicial
     
-    st.subheader("📋 Problema Atual")
+    st.subheader(" Problema Atual")
     st.dataframe(st.session_state.df)
     
-    st.subheader("🔄 Solução Inicial")
+    st.subheader(" Solução Inicial")
     st.dataframe(pd.DataFrame(solucao_inicial))
-    st.metric("⏱️ Makespan Inicial", f"{makespan_inicial} unidades de tempo")
+    st.metric("Makespan Inicial", f"{makespan_inicial} unidades de tempo")
     
-    st.subheader("🔍 Resultados dos Métodos de Otimização")
+    st.subheader("Resultados dos Métodos de Otimização")
     
     resultados = []
     cronogramas = {}
@@ -375,7 +375,7 @@ def gerar_relatorio_comparativo():
     
     melhor_resultado = min(resultados, key=lambda x: x[1])
     
-    st.subheader("📊 Comparação de Resultados")
+    st.subheader(" Comparação de Resultados")
     df_comparativo = pd.DataFrame(resultados, columns=["Método", "Makespan"])
     
     def highlight_min(s):
@@ -384,12 +384,12 @@ def gerar_relatorio_comparativo():
     
     st.dataframe(df_comparativo.style.apply(highlight_min, subset=['Makespan']))
     
-    st.success(f"🏅 **MELHOR MÉTODO**: {melhor_resultado[0]} com **{melhor_resultado[1]}** unidades de tempo")
+    st.success(f" **MELHOR MÉTODO**: {melhor_resultado[0]} com **{melhor_resultado[1]}** unidades de tempo")
     
     ganho = (100 * (makespan_inicial - melhor_resultado[1]) / makespan_inicial)
-    st.metric("🎯 Ganho do Melhor Método", f"{ganho:.2f}%")
+    st.metric("Ganho do Melhor Método", f"{ganho:.2f}%")
     
-    st.subheader("📈 Detalhes dos Cronogramas Otimizados")
+    st.subheader("Detalhes dos Cronogramas Otimizados")
     
     metodo_selecionado = st.selectbox("Selecione o método para ver detalhes:", ["Subida de Encosta", "Subida com Tentativas", "Têmpera Simulada"])
     
@@ -401,9 +401,9 @@ def gerar_relatorio_comparativo():
         st.dataframe(pd.DataFrame(cronograma))
         st.metric(f"Makespan - {metodo_selecionado}", f"{makespan} unidades de tempo")
     
-    st.subheader("💾 Download do Relatório")
+    st.subheader("Download do Relatório")
     
-    if st.button("📥 Baixar Relatório Completo (CSV)"):
+    if st.button("Baixar Relatório Completo (CSV)"):
         relatorio_data = []
         relatorio_data.append(["PROBLEMA", "", ""])
         for i, job in enumerate(dados):
@@ -426,7 +426,7 @@ def gerar_relatorio_comparativo():
         csv = df_relatorio.to_csv(index=False)
         
         st.download_button(
-            label="⬇️ Download Relatório CSV",
+            label="Download Relatório CSV",
             data=csv,
             file_name=f"relatorio_jobshop_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
             mime="text/csv"
@@ -454,7 +454,7 @@ def tela_algoritmos_geneticos():
 # ========== MENU PRINCIPAL ==========
 with st.sidebar:
     escolha = option_menu(
-        menu_title="📊 Menu",
+        menu_title="Menu",
         options=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"],
         icons=["house", "calculator", "trophy", "info-circle", "shuffle"],
         menu_icon="list",
@@ -490,9 +490,9 @@ elif escolha == "Sobre":
 elif escolha == "Algoritmos Genéticos":
     tela_algoritmos_geneticos()
 else:
-    st.title("🏭 Job Shop Scheduling")
+    st.title("Job Shop Scheduling")
     st.write("Use o menu lateral para navegar entre as opções.")
-    st.info("💡 **Dica**: Comece pela opção 'Métodos Básicos' para gerar uma solução inicial, depois use 'Relatório Comparativo' para comparar todos os métodos!")
+    st.info("**Dica**: Comece pela opção 'Métodos Básicos' para gerar uma solução inicial, depois use 'Relatório Comparativo' para comparar todos os métodos!")
 
 # Reiniciar variáveis em sessão ao alterar o menu
 if escolha != st.session_state.menu_anterior:
