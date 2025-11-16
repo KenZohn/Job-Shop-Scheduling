@@ -4,8 +4,8 @@ import pandas as pd
 import random
 import streamlit as st
 from streamlit_option_menu import option_menu
+import io
 
-# ========== FUNÇÕES AUXILIARES ==========
 def resetar_variavel():
     if "solucao_inicial" in st.session_state:
         del st.session_state["solucao_inicial"]
@@ -53,7 +53,7 @@ def gerar_solucao_inicial_aleatoria(dados, tamanho_problema):
         })
     
     dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados]
-    df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(3)], index=[f"J{i+1}" for i in range(tamanho_problema)])
+    df = pd.DataFrame(dados_formatados, columns=[f"Op{i+1}" for i in range(len(dados[0]))], index=[f"J{i+1}" for i in range(tamanho_problema)])
 
     return cronograma, df
 
@@ -118,7 +118,6 @@ def mostrar_solucao_inicial_aleatoria(dados, cronograma, df):
     st.session_state.makespan_inicial = makespan
     st.session_state.df = df
 
-# ========== ALGORITMOS DE OTIMIZAÇÃO ==========
 def construir_lista_por_maquina(dados):
     maquina_ops = {}
     for job_id, operacoes in enumerate(dados):
@@ -234,7 +233,24 @@ def tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, f
 
     return melhor_cronograma, melhor_makespan
 
-# ========== TELAS DA APLICAÇÃO ==========
+#FUNÇÃO DE DOWNLOAD
+def criar_arquivo_download(cronograma, nome_arquivo="cronograma_jobshop"):
+    """Cria um arquivo CSV para download formatado corretamente"""
+    
+    # Criar DataFrame
+    df = pd.DataFrame(cronograma)
+    
+    # Criar buffer em memória
+    buffer = io.StringIO()
+    
+    # delimitador ponto e vírgula
+    df.to_csv(buffer, index=False, sep=';', encoding='utf-8')
+    
+    # Resetar posição do buffer
+    buffer.seek(0)
+    
+    return buffer.getvalue()
+
 def tela_metodos_basicos():
     st.header("Métodos Básicos")
 
@@ -245,8 +261,10 @@ def tela_metodos_basicos():
 
         if tipo_execucao == "Aleatório":
             tamanho_problema = st.number_input("Tamanho do problema", min_value=1, step=1, value=3)
+            num_maquinas = st.number_input("Número de máquinas", min_value=1, step=1, value=3)
         else:
             tamanho_problema = None
+            num_maquinas = 3
 
         mostrar_solucao = st.button("Solução Inicial")
     
@@ -266,7 +284,7 @@ def tela_metodos_basicos():
 
         elif tipo_execucao == "Aleatório":
             if mostrar_solucao:
-                dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=3)
+                dados = gerar_problema_aleatorio(num_jobs=tamanho_problema, num_maquinas=num_maquinas)
                 cronograma, df = gerar_solucao_inicial_aleatoria(dados, tamanho_problema)
                 mostrar_solucao_inicial_aleatoria(dados, cronograma, df)
                 st.session_state.dados_problema = dados
@@ -325,17 +343,29 @@ def tela_metodos_basicos():
             
             ganho = (100 * (makespan_inicial - melhor_makespan) / makespan_inicial)
             st.metric("Ganho", f"{ganho:.2f} %")
+            
+            #BOTÃO DE DOWNLOAD
+            st.subheader("Download da Solução")
+            csv_data = criar_arquivo_download(cronograma_otimizado, f"solucao_{metodo.lower().replace(' ', '_')}")
+            
+            st.download_button(
+                label="Baixar Cronograma",
+                data=csv_data,
+                file_name=f"cronograma_{metodo.lower().replace(' ', '_')}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key=f"download_{random.randint(1000, 9999)}"
+            )
 
-        # BOTÃO CORRIGIDO - Agora salva no session_state que queremos ir para o relatório
+        # BOTÃO RELATÓRIO COMPARATIVO
         if st.button("COMPARAR TODOS OS MÉTODOS"):
             if "dados_problema" in st.session_state and "solucao_inicial" in st.session_state:
-                st.session_state.ir_para_relatorio = True
+                st.session_state.pagina_atual = "Relatório Comparativo"
                 st.rerun()
             else:
                 st.warning("Por favor, clique em 'Solução Inicial' primeiro!")
 
 def gerar_relatorio_comparativo():
-    st.header(" RELATÓRIO COMPARATIVO - TODOS OS MÉTODOS")
+    st.header("RELATÓRIO COMPARATIVO - TODOS OS MÉTODOS")
     
     # Verificar se existe solução inicial
     if "dados_problema" not in st.session_state or "solucao_inicial" not in st.session_state:
@@ -345,92 +375,124 @@ def gerar_relatorio_comparativo():
     dados = st.session_state.dados_problema
     solucao_inicial = st.session_state.solucao_inicial
     makespan_inicial = st.session_state.makespan_inicial
+    n = len(dados)  # Número de jobs
     
-    st.subheader(" Problema Atual")
+    st.subheader("Problema Atual")
     st.dataframe(st.session_state.df)
     
-    st.subheader(" Solução Inicial")
+    st.subheader("Solução Inicial")
     st.dataframe(pd.DataFrame(solucao_inicial))
     st.metric("Makespan Inicial", f"{makespan_inicial} unidades de tempo")
     
     st.subheader("Resultados dos Métodos de Otimização")
     
+    # Executar todos os métodos
     resultados = []
-    cronogramas = {}
     
+    # Subida de Encosta Simples
     with st.spinner("Executando Subida de Encosta..."):
-        cronograma1, makespan1 = subida_de_encosta(dados, solucao_inicial)
-        resultados.append(["Subida de Encosta", makespan1])
-        cronogramas["Subida de Encosta"] = cronograma1
+        cronograma_se, makespan_se = subida_de_encosta(dados, solucao_inicial)
+        ganho_se = (100 * (makespan_inicial - makespan_se) / makespan_inicial)
+        resultados.append(["SE", "---", f"{ganho_se:.2f}%"])
     
-    with st.spinner("Executando Subida com Tentativas..."):
-        cronograma2, makespan2 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=3)
-        resultados.append(["Subida com Tentativas", makespan2])
-        cronogramas["Subida com Tentativas"] = cronograma2
+    # Subida de Encosta com Tentativas - diferentes valores de TMAX
+    with st.spinner("Executando Subida com Tentativas (TMAX=N)..."):
+        cronograma_set1, makespan_set1 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=n)
+        ganho_set1 = (100 * (makespan_inicial - makespan_set1) / makespan_inicial)
+        resultados.append(["SET", f"TMAX={n} ; TMAX=2*{n}", f"{ganho_set1:.2f}%"])
     
-    with st.spinner("Executando Têmpera Simulada..."):
-        cronograma3, makespan3 = tempera_simulada(dados, solucao_inicial)
-        resultados.append(["Têmpera Simulada", makespan3])
-        cronogramas["Têmpera Simulada"] = cronograma3
+    with st.spinner("Executando Subida com Tentativas (TMAX=2*N)..."):
+        cronograma_set2, makespan_set2 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=2*n)
+        ganho_set2 = (100 * (makespan_inicial - makespan_set2) / makespan_inicial)
+        resultados.append(["SET", f"TMAX={n//2} ; TMAX={n}", f"{ganho_set2:.2f}%"])
     
-    melhor_resultado = min(resultados, key=lambda x: x[1])
+    with st.spinner("Executando Subida com Tentativas (TMAX=N/2)..."):
+        cronograma_set3, makespan_set3 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=max(1, n//2))
+        ganho_set3 = (100 * (makespan_inicial - makespan_set3) / makespan_inicial)
+        resultados.append(["SET", f"TMAX={max(1, n//2)} ; TMAX={max(1, n//2)}", f"{ganho_set3:.2f}%"])
     
-    st.subheader(" Comparação de Resultados")
-    df_comparativo = pd.DataFrame(resultados, columns=["Método", "Makespan"])
+    # Têmpera Simulada - diferentes combinações de parâmetros
+    with st.spinner("Executando Têmpera Simulada (TI=100, TF=0.1, FR=0.8)..."):
+        cronograma_te1, makespan_te1 = tempera_simulada(dados, solucao_inicial, temp_inicial=100, temp_final=0.1, fator=0.8)
+        ganho_te1 = (100 * (makespan_inicial - makespan_te1) / makespan_inicial)
+        resultados.append(["TE", "TI=100 TF=0.1 FR=0.8", f"{ganho_te1:.2f}%"])
     
-    def highlight_min(s):
-        is_min = s == s.min()
-        return ['background-color: lightgreen' if v else '' for v in is_min]
+    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.1, FR=0.8)..."):
+        cronograma_te2, makespan_te2 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.1, fator=0.8)
+        ganho_te2 = (100 * (makespan_inicial - makespan_te2) / makespan_inicial)
+        resultados.append(["TE", "TI=200 TF=0.1 FR=0.8", f"{ganho_te2:.2f}%"])
     
-    st.dataframe(df_comparativo.style.apply(highlight_min, subset=['Makespan']))
+    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.1, FR=0.8)..."):
+        cronograma_te3, makespan_te3 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.8)
+        ganho_te3 = (100 * (makespan_inicial - makespan_te3) / makespan_inicial)
+        resultados.append(["TE", "TI=500 TF=0.1 FR=0.8", f"{ganho_te3:.2f}%"])
     
-    st.success(f" **MELHOR MÉTODO**: {melhor_resultado[0]} com **{melhor_resultado[1]}** unidades de tempo")
+    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.1, FR=0.9)..."):
+        cronograma_te4, makespan_te4 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.1, fator=0.9)
+        ganho_te4 = (100 * (makespan_inicial - makespan_te4) / makespan_inicial)
+        resultados.append(["TE", "TI=200 TF=0.1 FR=0.9", f"{ganho_te4:.2f}%"])
     
-    ganho = (100 * (makespan_inicial - melhor_resultado[1]) / makespan_inicial)
-    st.metric("Ganho do Melhor Método", f"{ganho:.2f}%")
+    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.1, FR=0.9)..."):
+        cronograma_te5, makespan_te5 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.9)
+        ganho_te5 = (100 * (makespan_inicial - makespan_te5) / makespan_inicial)
+        resultados.append(["TE", "TI=500 TF=0.1 FR=0.9", f"{ganho_te5:.2f}%"])
     
-    st.subheader("Detalhes dos Cronogramas Otimizados")
+    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.01, FR=0.9)..."):
+        cronograma_te6, makespan_te6 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.01, fator=0.9)
+        ganho_te6 = (100 * (makespan_inicial - makespan_te6) / makespan_inicial)
+        resultados.append(["TE", "TI=200 TF=0.01 FR=0.9", f"{ganho_te6:.2f}%"])
     
-    metodo_selecionado = st.selectbox("Selecione o método para ver detalhes:", ["Subida de Encosta", "Subida com Tentativas", "Têmpera Simulada"])
+    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.01, FR=0.9)..."):
+        cronograma_te7, makespan_te7 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.01, fator=0.9)
+        ganho_te7 = (100 * (makespan_inicial - makespan_te7) / makespan_inicial)
+        resultados.append(["TE", "TI=500 TF=0.01 FR=0.9", f"{ganho_te7:.2f}%"])
     
-    if metodo_selecionado in cronogramas:
-        cronograma = cronogramas[metodo_selecionado]
-        makespan = next((resultado[1] for resultado in resultados if resultado[0] == metodo_selecionado), None)
-        
-        st.write(f"**Cronograma - {metodo_selecionado}**")
-        st.dataframe(pd.DataFrame(cronograma))
-        st.metric(f"Makespan - {metodo_selecionado}", f"{makespan} unidades de tempo")
+    # Cria DataFrame com os resultados
+    df_resultados = pd.DataFrame(resultados, columns=["Método", "Observação", "Ganho"])
     
-    st.subheader("Download do Relatório")
+    # Exibir tabela
+    st.subheader("Tabela de Resultados")
+    st.table(df_resultados.style.hide(axis="index"))
     
-    if st.button("Baixar Relatório Completo (CSV)"):
-        relatorio_data = []
-        relatorio_data.append(["PROBLEMA", "", ""])
-        for i, job in enumerate(dados):
-            relatorio_data.append([f"Job {i+1}", str(job), ""])
-        
-        relatorio_data.append(["", "", ""])
-        relatorio_data.append(["SOLUÇÃO INICIAL", f"Makespan: {makespan_inicial}", ""])
-        
-        relatorio_data.append(["", "", ""])
-        relatorio_data.append(["MÉTODOS DE OTIMIZAÇÃO", "Makespan", "Ganho (%)"])
-        
-        for metodo, makespan in resultados:
-            ganho_metodo = (100 * (makespan_inicial - makespan) / makespan_inicial)
-            relatorio_data.append([metodo, makespan, f"{ganho_metodo:.2f}%"])
-        
-        relatorio_data.append(["", "", ""])
-        relatorio_data.append(["MELHOR MÉTODO", melhor_resultado[0], f"{ganho:.2f}%"])
-        
-        df_relatorio = pd.DataFrame(relatorio_data, columns=["Descrição", "Valor", "Detalhe"])
-        csv = df_relatorio.to_csv(index=False)
-        
-        st.download_button(
-            label="Download Relatório CSV",
-            data=csv,
-            file_name=f"relatorio_jobshop_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
-            mime="text/csv"
-        )
+    # Encontrar o melhor resultado
+    melhor_ganho = max(float(resultado[2].replace('%', '')) for resultado in resultados)
+    melhor_metodo = next(resultado for resultado in resultados if float(resultado[2].replace('%', '')) == melhor_ganho)
+    
+    st.success(f"**MELHOR MÉTODO**: {melhor_metodo[0]} - {melhor_metodo[1]} com ganho de {melhor_metodo[2]}")
+    
+    # BOTÃO DE DOWNLOAD
+    st.subheader("Download do Relatório Completo")
+    
+    # Cria relatório 
+    relatorio_data = []
+    relatorio_data.append(["PROBLEMA", "", ""])
+    for i, job in enumerate(dados):
+        relatorio_data.append([f"Job {i+1}", str(job), ""])
+    
+    relatorio_data.append(["", "", ""])
+    relatorio_data.append(["SOLUÇÃO INICIAL", f"Makespan: {makespan_inicial}", ""])
+    
+    relatorio_data.append(["", "", ""])
+    relatorio_data.append(["MÉTODO", "OBSERVAÇÃO", "GANHO"])
+    
+    for linha in resultados:
+        relatorio_data.append(linha)
+    
+    relatorio_data.append(["", "", ""])
+    relatorio_data.append(["MELHOR MÉTODO", f"{melhor_metodo[0]} - {melhor_metodo[1]}", melhor_metodo[2]])
+    
+    # Converte para CSV
+    df_relatorio = pd.DataFrame(relatorio_data, columns=["Método", "Observação", "Ganho"])
+    csv_relatorio = df_relatorio.to_csv(index=False, sep=';', encoding='utf-8')
+    
+    # Botão de download
+    st.download_button(
+        label="Baixar Relatório Completo",
+        data=csv_relatorio,
+        file_name=f"relatorio_completo_jobshop_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+        mime="text/csv",
+        key="download_relatorio_completo"
+    )
 
 def tela_sobre():
     st.header("Sobre o Projeto")
@@ -451,50 +513,70 @@ def tela_algoritmos_geneticos():
     st.header("Algoritmos Genéticos")
     st.info("Módulo em desenvolvimento.")
 
-# ========== MENU PRINCIPAL ==========
+# Inicializar variáveis de sessão
+if "menu_anterior" not in st.session_state:
+    st.session_state.menu_anterior = None
+if "pagina_atual" not in st.session_state:
+    st.session_state.pagina_atual = "Início"
+
+#mostrar qual página é baseado no session_state
+if st.session_state.pagina_atual == "Relatório Comparativo":
+    escolha_efetiva = "Relatório Comparativo"
+else:
+    escolha_efetiva = st.session_state.pagina_atual
+
+# Menu principal
 with st.sidebar:
     escolha = option_menu(
         menu_title="Menu",
         options=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"],
         icons=["house", "calculator", "trophy", "info-circle", "shuffle"],
         menu_icon="list",
-        default_index=0,
+        default_index=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"].index(escolha_efetiva),
         orientation="vertical",
         styles={
+            "container": {"padding": "5px", "background-color": "#f0f2f6"},
+            "icon": {"color": "#262730", "font-size": "16px"}, 
+            "nav-link": {
+                "font-size": "16px",
+                "text-align": "left",
+                "margin": "2px",
+                "padding": "10px",
+                "border-radius": "8px",
+                "color": "#262730",
+                "background-color": "#f0f2f6"
+            },
+            "nav-link:hover": {
+                "background-color": "#e6e9ef",
+                "color": "#262730"
+            },
             "nav-link-selected": {
-                "background-color": "#464646",
+                "background-color": "#4e8cff",
                 "color": "white",
                 "font-weight": "bold"
             }
         }
     )
 
-# Inicializar variáveis de sessão
-if "menu_anterior" not in st.session_state:
-    st.session_state.menu_anterior = None
-if "ir_para_relatorio" not in st.session_state:
-    st.session_state.ir_para_relatorio = False
-
-# CORREÇÃO: Se o usuário clicou para ir para o relatório, forçar a navegação
-if st.session_state.ir_para_relatorio:
-    escolha = "Relatório Comparativo"
-    st.session_state.ir_para_relatorio = False
+# Atualizar a página atual
+if escolha != st.session_state.pagina_atual:
+    st.session_state.pagina_atual = escolha
 
 # Navegação entre telas
-if escolha == "Métodos Básicos":
+if st.session_state.pagina_atual == "Métodos Básicos":
     tela_metodos_basicos()
-elif escolha == "Relatório Comparativo":
+elif st.session_state.pagina_atual == "Relatório Comparativo":
     gerar_relatorio_comparativo()
-elif escolha == "Sobre":
+elif st.session_state.pagina_atual == "Sobre":
     tela_sobre()
-elif escolha == "Algoritmos Genéticos":
+elif st.session_state.pagina_atual == "Algoritmos Genéticos":
     tela_algoritmos_geneticos()
 else:
     st.title("Job Shop Scheduling")
     st.write("Use o menu lateral para navegar entre as opções.")
     st.info("**Dica**: Comece pela opção 'Métodos Básicos' para gerar uma solução inicial, depois use 'Relatório Comparativo' para comparar todos os métodos!")
 
-# Reiniciar variáveis em sessão ao alterar o menu
+# Reiniciar variáveis
 if escolha != st.session_state.menu_anterior:
     if "solucao_inicial" in st.session_state:
         del st.session_state["solucao_inicial"]
