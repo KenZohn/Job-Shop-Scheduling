@@ -535,23 +535,8 @@ with st.sidebar:
         default_index=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"].index(escolha_efetiva),
         orientation="vertical",
         styles={
-            "container": {"padding": "5px", "background-color": "#f0f2f6"},
-            "icon": {"color": "#262730", "font-size": "16px"}, 
-            "nav-link": {
-                "font-size": "16px",
-                "text-align": "left",
-                "margin": "2px",
-                "padding": "10px",
-                "border-radius": "8px",
-                "color": "#262730",
-                "background-color": "#f0f2f6"
-            },
-            "nav-link:hover": {
-                "background-color": "#e6e9ef",
-                "color": "#262730"
-            },
             "nav-link-selected": {
-                "background-color": "#4e8cff",
+                "background-color": "#464646",
                 "color": "white",
                 "font-weight": "bold"
             }
