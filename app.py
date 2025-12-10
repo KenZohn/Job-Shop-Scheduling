@@ -387,74 +387,54 @@ def mutacao_troca_simples(individuo):
     
     return mutado
 
-def algoritmo_genetico_simples(dados, tp=30, ng=50, tc=0.8, tm=0.1):
-    """Algoritmo genético simplificado - versão corrigida"""
-    # 1. População inicial
+def algoritmo_genetico_simples(dados, tp=30, ng=50, tc=0.8, tm=0.1, ig=0.2):
     pop = pop_ini_jobshop(dados, tp)
-    
-    # 2. Avaliação inicial
     fit = aptidao_jobshop_simples(pop, dados)
-    
-    # Melhor solução
+
     melhor_individuo = None
     melhor_makespan = float('inf')
     historico = []
-    
-    # 3. Evolução (sem atualizações de interface durante o loop)
+
     for geracao in range(ng):
         nova_pop = []
-        
-        # Gerar nova população
         while len(nova_pop) < tp:
-            # Selecionar pais
             pai1_idx = selecao_roleta_simples(fit)
             pai2_idx = selecao_roleta_simples(fit)
-            
-            pai1 = pop[pai1_idx]
-            pai2 = pop[pai2_idx]
-            
-            # Cruzamento
+            pai1, pai2 = pop[pai1_idx], pop[pai2_idx]
+
             if random.random() < tc:
                 filho1, filho2 = cruzamento_ponto_unico(pai1, pai2)
             else:
                 filho1, filho2 = pai1.copy(), pai2.copy()
-            
-            # Mutação
+
             if random.random() < tm:
                 filho1 = mutacao_troca_simples(filho1)
-            
             if random.random() < tm:
                 filho2 = mutacao_troca_simples(filho2)
-            
+
             nova_pop.append(filho1)
             if len(nova_pop) < tp:
                 nova_pop.append(filho2)
-        
-        # Atualizar população
-        pop = nova_pop
+
+        # >>> Aplicar elitismo com IG
+        elite = int(ig * tp)
+        pop_ordenada = [x for _, x in sorted(zip(fit, pop), key=lambda z: z[0], reverse=True)]
+        fit_desc = aptidao_jobshop_simples(nova_pop, dados)
+        desc_ordenada = [x for _, x in sorted(zip(fit_desc, nova_pop), key=lambda z: z[0], reverse=True)]
+        pop = pop_ordenada[:elite] + desc_ordenada[:tp-elite]
         fit = aptidao_jobshop_simples(pop, dados)
-        
-        # Encontrar melhor indivíduo
-        for i, individuo in enumerate(pop):
+
+        # Atualizar melhor
+        for individuo in pop:
             cronograma = decodificar_individuo_simples(individuo, dados)
             makespan = avalia(cronograma)
-            
             if makespan < melhor_makespan:
                 melhor_makespan = makespan
                 melhor_individuo = individuo.copy()
-        
-        # Registrar histórico
+
         historico.append(melhor_makespan)
-    
-    # Gerar cronograma final
-    if melhor_individuo is not None:
-        cronograma_final = decodificar_individuo_simples(melhor_individuo, dados)
-    else:
-        # Fallback
-        melhor_idx = fit.index(max(fit)) if fit else 0
-        cronograma_final = decodificar_individuo_simples(pop[melhor_idx], dados)
-        melhor_makespan = avalia(cronograma_final)
-    
+
+    cronograma_final = decodificar_individuo_simples(melhor_individuo, dados)
     return cronograma_final, melhor_makespan, historico
 
 # ==============================
@@ -782,6 +762,9 @@ def tela_algoritmos_geneticos():
             tm = st.slider("Taxa de Mutação (TM)", 
                           min_value=0.0, max_value=0.3, value=0.1, step=0.01,
                           key="tm_slider")
+            ig = st.slider("Taxa de Elitismo (IG)", 
+                          min_value=0.0, max_value=0.5, value=0.2, step=0.05,
+                          key="ig_slider")
         
         # Botão de execução
         executar_disabled = not st.session_state.ag_problema_carregado
@@ -808,7 +791,8 @@ def tela_algoritmos_geneticos():
                         tp=tp,
                         ng=ng,
                         tc=tc,
-                        tm=tm
+                        tm=tm,
+                        ig=ig
                     )
                 
                 # Armazenar resultados no session_state
