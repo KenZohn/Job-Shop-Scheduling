@@ -2,9 +2,14 @@ import copy
 import math
 import pandas as pd
 import random
+import numpy as np
 import streamlit as st
 from streamlit_option_menu import option_menu
 import io
+
+# ==============================
+# FUNÇÕES BÁSICAS EXISTENTES
+# ==============================
 
 def resetar_variavel():
     if "solucao_inicial" in st.session_state:
@@ -233,23 +238,228 @@ def tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, f
 
     return melhor_cronograma, melhor_makespan
 
-#FUNÇÃO DE DOWNLOAD
 def criar_arquivo_download(cronograma, nome_arquivo="cronograma_jobshop"):
     """Cria um arquivo CSV para download formatado corretamente"""
-    
-    # Criar DataFrame
     df = pd.DataFrame(cronograma)
-    
-    # Criar buffer em memória
     buffer = io.StringIO()
-    
-    # delimitador ponto e vírgula
     df.to_csv(buffer, index=False, sep=';', encoding='utf-8')
-    
-    # Resetar posição do buffer
     buffer.seek(0)
-    
     return buffer.getvalue()
+
+# ==============================
+# ALGORITMO GENÉTICO
+# ==============================
+
+def pop_ini_jobshop(dados, tamanho_pop):
+    n_jobs = len(dados)
+    n_ops = [len(job) for job in dados]
+    cromossomo_base = []
+    for j, ops in enumerate(n_ops):
+        cromossomo_base += [j] * ops  # cada job aparece tantas vezes quanto suas operações
+    
+    pop = []
+    for _ in range(tamanho_pop):
+        individuo = cromossomo_base.copy()
+        random.shuffle(individuo)
+        pop.append(individuo)
+    
+    return pop
+
+
+def decodificar_individuo_simples(individuo, dados):
+    """
+    Decodifica um indivíduo em cronograma detalhado.
+    Retorna lista de dicionários: Job, Operação, Máquina, Início, Fim
+    """
+    cronograma = []
+    tempo_maquinas = {maq: 0 for maq in {op[0] for job in dados for op in job}}
+    tempo_jobs = {j: 0 for j in range(len(dados))}
+    contagem_ops = {j: 0 for j in range(len(dados))}
+    
+    # 1. Percorre cromossomo
+    for job_idx in individuo:
+        op_idx = contagem_ops[job_idx]
+        if op_idx < len(dados[job_idx]):
+            maquina, duracao = dados[job_idx][op_idx]
+            inicio = max(tempo_maquinas[maquina], tempo_jobs[job_idx])
+            fim = inicio + duracao
+            tempo_maquinas[maquina] = fim
+            tempo_jobs[job_idx] = fim
+            contagem_ops[job_idx] += 1
+            cronograma.append({
+                "Job": f"J{job_idx+1}",
+                "Operação": f"Op{op_idx+1}",
+                "Máquina": maquina,
+                "Início": inicio,
+                "Fim": fim
+            })
+    
+    # 2. Força inclusão das operações restantes (se o cromossomo não percorreu todas)
+    for job_idx, job in enumerate(dados):
+        while contagem_ops[job_idx] < len(job):
+            op_idx = contagem_ops[job_idx]
+            maquina, duracao = job[op_idx]
+            inicio = max(tempo_maquinas[maquina], tempo_jobs[job_idx])
+            fim = inicio + duracao
+            tempo_maquinas[maquina] = fim
+            tempo_jobs[job_idx] = fim
+            contagem_ops[job_idx] += 1
+            cronograma.append({
+                "Job": f"J{job_idx+1}",
+                "Operação": f"Op{op_idx+1}",
+                "Máquina": maquina,
+                "Início": inicio,
+                "Fim": fim
+            })
+    
+    return cronograma
+
+
+def aptidao_jobshop_simples(pop, dados):
+    """Calcula aptidão (versão simplificada)"""
+    fit = []
+    for individuo in pop:
+        cronograma = decodificar_individuo_simples(individuo, dados)
+        makespan = avalia(cronograma)
+        # Quanto menor o makespan, melhor (usar 1/makespan)
+        if makespan > 0:
+            fit.append(1.0 / makespan)
+        else:
+            fit.append(0.0)
+    
+    # Normalizar
+    soma = sum(fit)
+    if soma > 0:
+        fit = [f / soma for f in fit]
+    else:
+        fit = [1.0 / len(fit) for _ in fit]
+    
+    return fit
+
+def selecao_roleta_simples(fit):
+    """Seleção por roleta (versão simplificada)"""
+    if not fit:
+        return 0
+    
+    soma = sum(fit)
+    if soma == 0:
+        return random.randint(0, len(fit) - 1)
+    
+    ale = random.random() * soma
+    acumulado = 0
+    
+    for i, f in enumerate(fit):
+        acumulado += f
+        if acumulado >= ale:
+            return i
+    
+    return len(fit) - 1
+
+def cruzamento_ponto_unico(pai1, pai2):
+    """Cruzamento em ponto único"""
+    n = len(pai1)
+    
+    if n < 2:
+        return pai1.copy(), pai2.copy()
+    
+    ponto = random.randint(1, n - 1)
+    
+    filho1 = pai1[:ponto] + pai2[ponto:]
+    filho2 = pai2[:ponto] + pai1[ponto:]
+    
+    return filho1, filho2
+
+def mutacao_troca_simples(individuo):
+    """Mutação por troca de posições"""
+    n = len(individuo)
+    
+    if n < 2:
+        return individuo
+    
+    # Criar cópia
+    mutado = individuo.copy()
+    
+    # Escolher duas posições diferentes
+    pos1, pos2 = random.sample(range(n), 2)
+    
+    # Trocar
+    mutado[pos1], mutado[pos2] = mutado[pos2], mutado[pos1]
+    
+    return mutado
+
+def algoritmo_genetico_simples(dados, tp=30, ng=50, tc=0.8, tm=0.1):
+    """Algoritmo genético simplificado - versão corrigida"""
+    # 1. População inicial
+    pop = pop_ini_jobshop(dados, tp)
+    
+    # 2. Avaliação inicial
+    fit = aptidao_jobshop_simples(pop, dados)
+    
+    # Melhor solução
+    melhor_individuo = None
+    melhor_makespan = float('inf')
+    historico = []
+    
+    # 3. Evolução (sem atualizações de interface durante o loop)
+    for geracao in range(ng):
+        nova_pop = []
+        
+        # Gerar nova população
+        while len(nova_pop) < tp:
+            # Selecionar pais
+            pai1_idx = selecao_roleta_simples(fit)
+            pai2_idx = selecao_roleta_simples(fit)
+            
+            pai1 = pop[pai1_idx]
+            pai2 = pop[pai2_idx]
+            
+            # Cruzamento
+            if random.random() < tc:
+                filho1, filho2 = cruzamento_ponto_unico(pai1, pai2)
+            else:
+                filho1, filho2 = pai1.copy(), pai2.copy()
+            
+            # Mutação
+            if random.random() < tm:
+                filho1 = mutacao_troca_simples(filho1)
+            
+            if random.random() < tm:
+                filho2 = mutacao_troca_simples(filho2)
+            
+            nova_pop.append(filho1)
+            if len(nova_pop) < tp:
+                nova_pop.append(filho2)
+        
+        # Atualizar população
+        pop = nova_pop
+        fit = aptidao_jobshop_simples(pop, dados)
+        
+        # Encontrar melhor indivíduo
+        for i, individuo in enumerate(pop):
+            cronograma = decodificar_individuo_simples(individuo, dados)
+            makespan = avalia(cronograma)
+            
+            if makespan < melhor_makespan:
+                melhor_makespan = makespan
+                melhor_individuo = individuo.copy()
+        
+        # Registrar histórico
+        historico.append(melhor_makespan)
+    
+    # Gerar cronograma final
+    if melhor_individuo is not None:
+        cronograma_final = decodificar_individuo_simples(melhor_individuo, dados)
+    else:
+        # Fallback
+        melhor_idx = fit.index(max(fit)) if fit else 0
+        cronograma_final = decodificar_individuo_simples(pop[melhor_idx], dados)
+        melhor_makespan = avalia(cronograma_final)
+    
+    return cronograma_final, melhor_makespan, historico
+
+# ==============================
+# TELAS DA APLICAÇÃO
+# ==============================
 
 def tela_metodos_basicos():
     st.header("Métodos Básicos")
@@ -344,7 +554,7 @@ def tela_metodos_basicos():
             ganho = (100 * (makespan_inicial - melhor_makespan) / makespan_inicial)
             st.metric("Ganho", f"{ganho:.2f} %")
             
-            #BOTÃO DE DOWNLOAD
+            # BOTÃO DE DOWNLOAD
             st.subheader("Download da Solução")
             csv_data = criar_arquivo_download(cronograma_otimizado, f"solucao_{metodo.lower().replace(' ', '_')}")
             
@@ -395,57 +605,17 @@ def gerar_relatorio_comparativo():
         ganho_se = (100 * (makespan_inicial - makespan_se) / makespan_inicial)
         resultados.append(["SE", "---", f"{ganho_se:.2f}%"])
     
-    # Subida de Encosta com Tentativas - diferentes valores de TMAX
-    with st.spinner("Executando Subida com Tentativas (TMAX=N)..."):
+    # Subida de Encosta com Tentativas
+    with st.spinner("Executando Subida com Tentativas..."):
         cronograma_set1, makespan_set1 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=n)
         ganho_set1 = (100 * (makespan_inicial - makespan_set1) / makespan_inicial)
-        resultados.append(["SET", f"TMAX={n} ; TMAX=2*{n}", f"{ganho_set1:.2f}%"])
+        resultados.append(["SET", f"TMAX={n}", f"{ganho_set1:.2f}%"])
     
-    with st.spinner("Executando Subida com Tentativas (TMAX=2*N)..."):
-        cronograma_set2, makespan_set2 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=2*n)
-        ganho_set2 = (100 * (makespan_inicial - makespan_set2) / makespan_inicial)
-        resultados.append(["SET", f"TMAX={n//2} ; TMAX={n}", f"{ganho_set2:.2f}%"])
-    
-    with st.spinner("Executando Subida com Tentativas (TMAX=N/2)..."):
-        cronograma_set3, makespan_set3 = subida_de_encosta_com_tentativas(dados, solucao_inicial, tmax=max(1, n//2))
-        ganho_set3 = (100 * (makespan_inicial - makespan_set3) / makespan_inicial)
-        resultados.append(["SET", f"TMAX={max(1, n//2)} ; TMAX={max(1, n//2)}", f"{ganho_set3:.2f}%"])
-    
-    # Têmpera Simulada - diferentes combinações de parâmetros
-    with st.spinner("Executando Têmpera Simulada (TI=100, TF=0.1, FR=0.8)..."):
-        cronograma_te1, makespan_te1 = tempera_simulada(dados, solucao_inicial, temp_inicial=100, temp_final=0.1, fator=0.8)
+    # Têmpera Simulada
+    with st.spinner("Executando Têmpera Simulada..."):
+        cronograma_te1, makespan_te1 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.8)
         ganho_te1 = (100 * (makespan_inicial - makespan_te1) / makespan_inicial)
-        resultados.append(["TE", "TI=100 TF=0.1 FR=0.8", f"{ganho_te1:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.1, FR=0.8)..."):
-        cronograma_te2, makespan_te2 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.1, fator=0.8)
-        ganho_te2 = (100 * (makespan_inicial - makespan_te2) / makespan_inicial)
-        resultados.append(["TE", "TI=200 TF=0.1 FR=0.8", f"{ganho_te2:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.1, FR=0.8)..."):
-        cronograma_te3, makespan_te3 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.8)
-        ganho_te3 = (100 * (makespan_inicial - makespan_te3) / makespan_inicial)
-        resultados.append(["TE", "TI=500 TF=0.1 FR=0.8", f"{ganho_te3:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.1, FR=0.9)..."):
-        cronograma_te4, makespan_te4 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.1, fator=0.9)
-        ganho_te4 = (100 * (makespan_inicial - makespan_te4) / makespan_inicial)
-        resultados.append(["TE", "TI=200 TF=0.1 FR=0.9", f"{ganho_te4:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.1, FR=0.9)..."):
-        cronograma_te5, makespan_te5 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.1, fator=0.9)
-        ganho_te5 = (100 * (makespan_inicial - makespan_te5) / makespan_inicial)
-        resultados.append(["TE", "TI=500 TF=0.1 FR=0.9", f"{ganho_te5:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=200, TF=0.01, FR=0.9)..."):
-        cronograma_te6, makespan_te6 = tempera_simulada(dados, solucao_inicial, temp_inicial=200, temp_final=0.01, fator=0.9)
-        ganho_te6 = (100 * (makespan_inicial - makespan_te6) / makespan_inicial)
-        resultados.append(["TE", "TI=200 TF=0.01 FR=0.9", f"{ganho_te6:.2f}%"])
-    
-    with st.spinner("Executando Têmpera Simulada (TI=500, TF=0.01, FR=0.9)..."):
-        cronograma_te7, makespan_te7 = tempera_simulada(dados, solucao_inicial, temp_inicial=500, temp_final=0.01, fator=0.9)
-        ganho_te7 = (100 * (makespan_inicial - makespan_te7) / makespan_inicial)
-        resultados.append(["TE", "TI=500 TF=0.01 FR=0.9", f"{ganho_te7:.2f}%"])
+        resultados.append(["TE", "TI=500 TF=0.1 FR=0.8", f"{ganho_te1:.2f}%"])
     
     # Cria DataFrame com os resultados
     df_resultados = pd.DataFrame(resultados, columns=["Método", "Observação", "Ganho"])
@@ -510,29 +680,276 @@ def tela_sobre():
     """)
 
 def tela_algoritmos_geneticos():
-    st.header("Algoritmos Genéticos")
-    st.info("Módulo em desenvolvimento.")
+    """Tela do Algoritmo Genético - VERSÃO CORRIGIDA E ÚNICA"""
+    st.header("Algoritmos Genéticos - Job Shop Scheduling")
+    
+    # Inicializar estado
+    if "ag_problema_carregado" not in st.session_state:
+        st.session_state.ag_problema_carregado = False
+    
+    # Layout principal
+    col_config, col_exec = st.columns(2)
+    
+    with col_config:
+        st.subheader("Configuração do Problema")
+        
+        # Tipo de problema
+        tipo_problema = st.radio(
+            "Selecione o tipo de problema:",
+            ["Usar problema fixo (exemplo)", "Usar problema aleatório"],
+            index=0,
+            key="tipo_problema_ag"
+        )
+        
+        if tipo_problema == "Usar problema fixo (exemplo)":
+            if st.button("Carregar Problema Fixo", width='stretch', key="btn_fixo"):
+                # Problema fixo
+                dados_fixo = [
+                    [("M1", 3), ("M2", 5), ("M3", 7)],
+                    [("M2", 9), ("M3", 1), ("M1", 4)],
+                    [("M3", 4), ("M1", 6), ("M2", 2)]
+                ]
+                
+                st.session_state.dados_ag = dados_fixo
+                st.session_state.ag_problema_carregado = True
+                
+                # Mostrar o problema
+                dados_formatados = [[f"{maquina} - {tempo}" for maquina, tempo in linha] for linha in dados_fixo]
+                df_fixo = pd.DataFrame(dados_formatados, 
+                                      columns=["Op1", "Op2", "Op3"], 
+                                      index=["J1", "J2", "J3"])
+                st.session_state.df_ag = df_fixo
+                
+                # Calcular makespan inicial
+                cronograma_inicial, _ = gerar_solucao_inicial_aleatoria(dados_fixo, 3)
+                st.session_state.makespan_inicial_ag = avalia(cronograma_inicial)
+
+                st.session_state.mostrar_resultados_ag = False
+                if 'ag_resultados' in st.session_state:
+                    del st.session_state.ag_resultados
+                
+                st.rerun()  # Força atualização para mostrar o problema
+        
+        elif tipo_problema == "Usar problema aleatório":
+            col_rand1, col_rand2 = st.columns(2)
+            with col_rand1:
+                n_jobs = st.number_input("Número de Jobs", min_value=2, max_value=10, value=3, key="n_jobs_ag")
+            with col_rand2:
+                n_maquinas = st.number_input("Número de Máquinas", min_value=2, max_value=10, value=3, key="n_maq_ag")
+            
+            if st.button("Gerar Problema Aleatório", width='stretch', key="btn_aleatorio"):
+                dados_aleatorio = gerar_problema_aleatorio(n_jobs, n_maquinas)
+                st.session_state.dados_ag = dados_aleatorio
+                st.session_state.ag_problema_carregado = True
+                
+                # Mostrar o problema
+                cronograma_ini, df_aleatorio = gerar_solucao_inicial_aleatoria(dados_aleatorio, n_jobs)
+                st.session_state.df_ag = df_aleatorio
+                st.session_state.makespan_inicial_ag = avalia(cronograma_ini)
+
+                st.session_state.mostrar_resultados_ag = False
+                if 'ag_resultados' in st.session_state:
+                    del st.session_state.ag_resultados
+
+                st.rerun()  # Força atualização
+        
+        # Mostrar problema se carregado
+        if st.session_state.ag_problema_carregado and "df_ag" in st.session_state:
+            st.divider()
+            st.subheader("Problema Carregado")
+            st.dataframe(st.session_state.df_ag, width='stretch')
+            
+            if "makespan_inicial_ag" in st.session_state:
+                st.metric("Makespan da Solução Inicial", 
+                         f"{st.session_state.makespan_inicial_ag} unidades")
+    
+    with col_exec:
+        st.subheader("Parâmetros do Algoritmo")
+        
+        # Parâmetros do AG
+        col_param1, col_param2 = st.columns(2)
+        with col_param1:
+            tp = st.number_input("Tamanho da População (TP)", 
+                                min_value=10, max_value=100, value=20,
+                                key="tp_input")
+            ng = st.number_input("Número de Gerações (NG)", 
+                                min_value=10, max_value=200, value=30,
+                                key="ng_input")
+        with col_param2:
+            tc = st.slider("Taxa de Cruzamento (TC)", 
+                          min_value=0.0, max_value=1.0, value=0.8, step=0.05,
+                          key="tc_slider")
+            tm = st.slider("Taxa de Mutação (TM)", 
+                          min_value=0.0, max_value=0.3, value=0.1, step=0.01,
+                          key="tm_slider")
+        
+        # Botão de execução
+        executar_disabled = not st.session_state.ag_problema_carregado
+        
+        # Verificar se o botão foi clicado
+        if st.button("Executar Algoritmo Genético", 
+                    type="primary", 
+                    width='stretch',
+                    disabled=executar_disabled,
+                    key="executar_ag"):
+            
+            if not st.session_state.ag_problema_carregado:
+                st.error("Por favor, carregue um problema primeiro!")
+                st.stop()
+            
+            # Container para mostrar progresso
+            progress_container = st.container()
+            
+            with progress_container:
+                with st.spinner("Executando Algoritmo Genético... Aguarde!"):
+                    # Executar AG
+                    cronograma_otimizado, makespan_otimizado, historico = algoritmo_genetico_simples(
+                        st.session_state.dados_ag,
+                        tp=tp,
+                        ng=ng,
+                        tc=tc,
+                        tm=tm
+                    )
+                
+                # Armazenar resultados no session_state
+                st.session_state.ag_resultados = {
+                    'cronograma': cronograma_otimizado,
+                    'makespan': makespan_otimizado,
+                    'historico': historico
+                }
+            
+            # Marcar que temos resultados para mostrar
+            st.session_state.mostrar_resultados_ag = True
+            
+            # Forçar rerun para mostrar resultados
+            st.rerun()
+        
+        # Mostrar resultados se existirem
+        if st.session_state.get('mostrar_resultados_ag', False) and 'ag_resultados' in st.session_state:
+            resultados = st.session_state.ag_resultados
+            
+            # Métricas
+            makespan_inicial = st.session_state.makespan_inicial_ag
+            makespan_otimizado = resultados['makespan']
+            ganho = ((makespan_inicial - makespan_otimizado) / makespan_inicial) * 100 if makespan_inicial > 0 else 0
+            
+            col_res1, col_res2, col_res3 = st.columns(3)
+            with col_res1:
+                st.metric("Makespan Inicial", f"{makespan_inicial}")
+            with col_res2:
+                st.metric("Makespan Otimizado", f"{makespan_otimizado}")
+            with col_res3:
+                st.metric("Ganho", f"{ganho:.1f}%", 
+                         delta=f"{ganho:.1f}%" if ganho > 0 else None,
+                         delta_color="normal" if ganho > 0 else "off")
+            
+            # Tabs para diferentes visualizações
+            tab1, tab2, tab3 = st.tabs(["📅 Cronograma", "📈 Convergência", "💾 Download"])
+            
+            with tab1:
+                st.subheader("Cronograma Otimizado")
+                df_cronograma = pd.DataFrame(resultados['cronograma'])
+                st.dataframe(df_cronograma, width='stretch')
+            
+            with tab2:
+                st.subheader("Convergência do Algoritmo")
+                if resultados['historico']:
+                    df_historico = pd.DataFrame({
+                        "Geração": range(1, len(resultados['historico']) + 1),
+                        "Makespan": resultados['historico']
+                    })
+                    st.line_chart(df_historico.set_index("Geração"))
+                    
+                    # Estatísticas
+                    st.write("**Estatísticas:**")
+                    col_stat1, col_stat2, col_stat3 = st.columns(3)
+                    with col_stat1:
+                        st.metric("Melhor", f"{min(resultados['historico'])}")
+                    with col_stat2:
+                        st.metric("Pior", f"{max(resultados['historico'])}")
+                    with col_stat3:
+                        if len(resultados['historico']) >= 10:
+                            st.metric("Média (últimas 10)", f"{np.mean(resultados['historico'][-10:]):.1f}")
+            
+            with tab3:
+                st.subheader("Download da Solução")
+                csv_data = criar_arquivo_download(resultados['cronograma'])
+                
+                st.download_button(
+                    label="Baixar Cronograma (CSV)",
+                    data=csv_data,
+                    file_name=f"cronograma_ag_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                    mime="text/csv",
+                    width='stretch',
+                    key="download_ag"
+                )
+        
+        elif executar_disabled:
+            st.info("ℹCarregue um problema na coluna à esquerda para habilitar a execução.")
+    
+    # Seção de explicação
+    st.divider()
+    with st.expander("📖 Como funciona o Algoritmo Genético"):
+        st.markdown("""
+        ### Conceito Básico
+        O Algoritmo Genético é inspirado na evolução natural:
+        
+        1. **População**: Conjunto de soluções candidatas
+        2. **Seleção**: As melhores soluções "sobrevivem"
+        3. **Reprodução**: Soluções combinam para gerar "filhos"
+        4. **Mutação**: Pequenas alterações aleatórias
+        5. **Substituição**: Nova geração substitui a anterior
+        
+        ### Parâmetros Importantes
+        
+        | Parâmetro | Significado | Recomendação |
+        |-----------|-------------|--------------|
+        | **TP** | Tamanho da população | 20-50 (maior = mais diverso, mas mais lento) |
+        | **NG** | Número de gerações | 30-100 (maior = mais tempo para convergir) |
+        | **TC** | Taxa de cruzamento | 0.7-0.9 (alta para boa exploração) |
+        | **TM** | Taxa de mutação | 0.05-0.15 (baixa para evitar desvio) |
+        
+        ### Para este problema
+        - Cada solução é uma **sequência de jobs**
+        - **Aptidão = 1 / makespan** (quanto menor o makespan, melhor)
+        - **Cruzamento**: Combina duas sequências
+        - **Mutação**: Troca posições na sequência
+        
+        **Dica**: Comece com TP=20, NG=30 para testes rápidos!
+        """)
+
+# ==============================
+# CONFIGURAÇÃO PRINCIPAL
+# ==============================
+
+# Configurar página
+st.set_page_config(
+    page_title="Job Shop Scheduling",
+    page_icon="",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
 # Inicializar variáveis de sessão
 if "menu_anterior" not in st.session_state:
     st.session_state.menu_anterior = None
 if "pagina_atual" not in st.session_state:
     st.session_state.pagina_atual = "Início"
-
-#mostrar qual página é baseado no session_state
-if st.session_state.pagina_atual == "Relatório Comparativo":
-    escolha_efetiva = "Relatório Comparativo"
-else:
-    escolha_efetiva = st.session_state.pagina_atual
+if "ag_problema_carregado" not in st.session_state:
+    st.session_state.ag_problema_carregado = False
+if "mostrar_resultados_ag" not in st.session_state:
+    st.session_state.mostrar_resultados_ag = False
 
 # Menu principal
 with st.sidebar:
     escolha = option_menu(
         menu_title="Menu",
-        options=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"],
-        icons=["house", "calculator", "trophy", "info-circle", "shuffle"],
+        options=["Início", "Métodos Básicos", "Relatório Comparativo", "Algoritmos Genéticos", "Sobre"],
+        icons=["house", "calculator", "trophy", "shuffle", "info-circle"],
         menu_icon="list",
-        default_index=["Início", "Métodos Básicos", "Relatório Comparativo", "Sobre", "Algoritmos Genéticos"].index(escolha_efetiva),
+        default_index=["Início", "Métodos Básicos", "Relatório Comparativo", "Algoritmos Genéticos", "Sobre"].index(
+            st.session_state.pagina_atual
+        ) if st.session_state.pagina_atual in ["Início", "Métodos Básicos", "Relatório Comparativo", "Algoritmos Genéticos", "Sobre"] else 0,
         orientation="vertical",
         styles={
             "nav-link-selected": {
@@ -544,22 +961,65 @@ with st.sidebar:
     )
 
 # Atualizar a página atual
-if escolha != st.session_state.pagina_atual:
-    st.session_state.pagina_atual = escolha
+st.session_state.pagina_atual = escolha
 
 # Navegação entre telas
 if st.session_state.pagina_atual == "Métodos Básicos":
     tela_metodos_basicos()
 elif st.session_state.pagina_atual == "Relatório Comparativo":
     gerar_relatorio_comparativo()
-elif st.session_state.pagina_atual == "Sobre":
-    tela_sobre()
 elif st.session_state.pagina_atual == "Algoritmos Genéticos":
     tela_algoritmos_geneticos()
+elif st.session_state.pagina_atual == "Sobre":
+    tela_sobre()
 else:
     st.title("Job Shop Scheduling")
-    st.write("Use o menu lateral para navegar entre as opções.")
-    st.info("**Dica**: Comece pela opção 'Métodos Básicos' para gerar uma solução inicial, depois use 'Relatório Comparativo' para comparar todos os métodos!")
+    st.markdown("---")
+    st.markdown("""
+    ## Bem-vindo ao Sistema de Otimização de Job Shop Scheduling!
+    
+    Este sistema permite otimizar o escalonamento de tarefas em um ambiente de produção onde:
+    
+    - **Jobs** precisam passar por várias **máquinas**
+    - Cada job tem uma sequência específica de operações
+    - Cada operação tem uma duração em uma máquina específica
+    
+    ### Objetivo
+    Minimizar o **makespan** (tempo total para completar todos os jobs).
+    
+    ### Funcionalidades
+    
+    1. **Métodos Básicos**: Heurísticas de otimização local
+    2. **Algoritmos Genéticos**: Meta-heurística inspirada na evolução natural
+    3. **Relatório Comparativo**: Comparação entre diferentes métodos
+    
+    ### Como começar
+    
+    1. Vá para **"Métodos Básicos"** para gerar um problema e testar otimizações simples
+    2. Experimente **"Algoritmos Genéticos"** para uma abordagem evolutiva
+    3. Use **"Relatório Comparativo"** para comparar todos os métodos
+    
+    ### Desenvolvido por
+    - Johnny Keniti Mukai
+    - Thais Ferreira Capucho
+    
+    ---
+    """)
+    
+    # Quick links
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("Ir para Métodos Básicos", width='stretch'):
+            st.session_state.pagina_atual = "Métodos Básicos"
+            st.rerun()
+    with col2:
+        if st.button("Ir para Algoritmos Genéticos", width='stretch'):
+            st.session_state.pagina_atual = "Algoritmos Genéticos"
+            st.rerun()
+    with col3:
+        if st.button("Ver Sobre", width='stretch'):
+            st.session_state.pagina_atual = "Sobre"
+            st.rerun()
 
 # Reiniciar variáveis
 if escolha != st.session_state.menu_anterior:
